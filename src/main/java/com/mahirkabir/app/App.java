@@ -1,6 +1,7 @@
 package com.mahirkabir.app;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -18,25 +19,22 @@ import soot.options.Options;
 
 public class App {
     public static String sourceDirectory = System.getProperty("user.dir") + File.separator + "analysis";
-    public static String clsName = "UsageExample";
+    public static String clsName = "HelloWorld";
 
     public static void setupSoot() {
         G.reset();
         Options.v().set_allow_phantom_refs(true);
-
-        // Add the path to rt.jar to the classpath
-        String rtJarDirectory = "lib\\rt.jar";
-        String classPathString = rtJarDirectory;
+        String classPathString = String.join(
+                File.pathSeparator,
+                sourceDirectory,
+                Paths.get("lib", "rt.jar").toString());
         Options.v().set_soot_classpath(classPathString);
-
         SootClass sc = Scene.v().loadClassAndSupport(clsName);
         sc.setApplicationClass();
-
         Scene.v().loadNecessaryClasses();
-
     }
 
-    public static boolean doesInvokeTheMethod(Unit u, String methodSubsignature, String classSignature) {
+    public static boolean invokesMethod(Unit u, String methodSubsignature, String classSignature) {
         AtomicBoolean result = new AtomicBoolean(false);
         u.apply(new AbstractStmtSwitch() {
             @Override
@@ -55,36 +53,32 @@ public class App {
     }
 
     public static void main(String[] args) {
-        if (args.length == 0) {
-            System.err.println("Please provide a method subsignature to search for its usages.");
+        if (args.length < 2) {
+            System.err.println("Need method signature and usage class signature");
             return;
         }
         setupSoot();
-        String usageMethodSubsignature = args[0];
-        String usageClassSignature = null;
-        String classMessage = "";
-        if (args.length > 1) {
-            usageClassSignature = args[1];
-            classMessage = " of the class " + usageClassSignature;
-        }
-        System.out.println("Searching the usages of method " + usageMethodSubsignature + classMessage + "...");
+
+        String methodSignature = args[0];
+        String classSignature = args[1];
+
         SootClass mainClass = Scene.v().getSootClass(clsName);
         for (SootMethod sm : mainClass.getMethods()) {
             JimpleBody body = (JimpleBody) sm.retrieveActiveBody();
 
-            List<Unit> usageFound = new ArrayList<>();
+            List<Unit> usages = new ArrayList<>();
             for (Iterator<Unit> it = body.getUnits().snapshotIterator(); it.hasNext();) {
                 Unit u = it.next();
-                if (doesInvokeTheMethod(u, usageMethodSubsignature, usageClassSignature))
-                    usageFound.add(u);
+                if (invokesMethod(u, methodSignature, classSignature))
+                    usages.add(u);
+
             }
-            if (usageFound.size() > 0) {
-                System.out.println(usageFound.size() + " Usage(s) found in the method " + sm.getSignature());
-                for (Unit u : usageFound) {
-                    System.out.println("   " + u.toString());
+            if (usages.size() > 0) {
+                System.out.println("Method: " + sm.getSignature() + " has been invoked: " + usages.size() + " time(s)");
+                for (Unit u : usages) {
+                    System.out.println("\t" + u.toString());
                 }
             }
-
         }
     }
 }
